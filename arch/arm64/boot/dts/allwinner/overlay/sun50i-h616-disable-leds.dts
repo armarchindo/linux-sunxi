@@ -1,0 +1,28 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	fragment@0 {
+		target = <&leds>;
+
+		__overlay__ {
+			status = "okay";
+
+			led-red {
+				linux,default-trigger = "none";
+			};
+
+			led-green {
+				linux,default-trigger = "none";
+			};
+
+			led-green-hat-wlan {
+				linux,default-trigger = "none";
+			};
+
+			led-green-hat-inet {
+				linux,default-trigger = "none";
+			};			
+		};
+	};
+};
