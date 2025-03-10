@@ -254,6 +254,15 @@ static int sprdwl_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 		if (!ret)
 			return NETDEV_TX_OK;
 	}
+ 
+  /*do not send packet before connected*/
+	if ((vif->mode == SPRDWL_MODE_STATION && vif->sm_state != SPRDWL_CONNECTED) ||
+		(vif->mode != SPRDWL_MODE_STATION && vif->priv->fw_stat[vif->mode] != SPRDWL_INTF_OPEN)) {
+		printk_ratelimited("%s, %d, error! should not send this data\n",
+			__func__, __LINE__);
+		dev_kfree_skb(skb);
+		return NETDEV_TX_OK;
+	}
 
 	/*mode not open, so we will not send data*/
 	if (vif->priv->fw_stat[vif->mode] != SPRDWL_INTF_OPEN) {
@@ -300,7 +309,7 @@ static int sprdwl_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	ret = sprdwl_send_data(vif, msg, skb, 0);
 #endif /* UWE5621_FTR */
 	if (ret) {
-		wl_ndev_log(L_ERR, ndev, "%s drop msg due to TX Err\n", __func__);
+		//wl_ndev_log(L_ERR, ndev, "%s drop msg due to TX Err\n", __func__);
 		/* FIXME as debug sdiom later, here just drop the msg
 		 * wapi temp drop
 		 */
@@ -929,29 +938,35 @@ static int sprdwl_set_mac(struct net_device *dev, void *addr)
 {
 	struct sprdwl_vif *vif = netdev_priv(dev);
 	struct sockaddr *sa = (struct sockaddr *)addr;
+	int ret;
 
 	if (!dev) {
 		netdev_err(dev, "Invalid net device\n");
+		return -EINVAL;
 	}
 
-	netdev_info(dev, "start set random mac: %pM\n", sa->sa_data);
+	//netdev_info(dev, "start set random mac: %pM\n", sa->sa_data);
 	if (is_multicast_ether_addr(sa->sa_data)) {
-		netdev_err(dev, "invalid, it is multicast addr: %pM\n", sa->sa_data);
-		return -EINVAL;
+		 netdev_err(dev, "invalid, it is multicast addr: %pM\n", sa->sa_data);
+		 return -EINVAL;
 	}
 
 	if (vif->mode == SPRDWL_MODE_STATION) {
 		if (!is_zero_ether_addr(sa->sa_data)) {
 			vif->has_rand_mac = true;
+			netdev_info(dev, "set station random mac addr\n");
 			memcpy(vif->random_mac, sa->sa_data, ETH_ALEN);
 			memcpy(dev->dev_addr, sa->sa_data, ETH_ALEN);
-		} else {
-			vif->has_rand_mac = false;
-			netdev_info(dev, "need clear random mac for sta/softap mode\n");
-			memset(vif->random_mac, 0, ETH_ALEN);
-			memcpy(dev->dev_addr, vif->mac, ETH_ALEN);
+			ret = wlan_cmd_set_rand_mac(vif->priv, vif->ctx_id,
+			             SPRDWL_CONNECT_RANDOM_ADDR, sa->sa_data);
+			if (ret) {
+				netdev_err(dev, "%s set station mac error\n",
+					   __func__);
+				return -EFAULT;
+			}
 		}
 	}
+
 	/*return success to pass vts test*/
 	return 0;
 }
